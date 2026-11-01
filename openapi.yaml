@@ -1,0 +1,319 @@
+openapi: 3.0.3
+info:
+  title: Career Center Integration Gateway API
+  version: 1.0.0
+  description: >-
+    Контракт интеграционного шлюза АИС «Центр карьеры и трудоустройства».
+    API предоставляет актуальные стажировки партнёров-работодателей и принимает
+    отклики студентов вместе с данными их резюме.
+servers:
+  - url: https://localhost:7042/api/v1
+    description: Локальный сервер разработки
+tags:
+  - name: Vacancies
+    description: Получение списка стажировок и вакансий
+  - name: Applications
+    description: Отправка откликов студентов
+security:
+  - bearerAuth: []
+paths:
+  /vacancies:
+    get:
+      tags:
+        - Vacancies
+      summary: Получить список актуальных стажировок
+      description: Возвращает опубликованные и активные стажировки партнёров-работодателей.
+      operationId: getVacancies
+      parameters:
+        - name: page
+          in: query
+          description: Номер страницы, начиная с 1.
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            default: 1
+        - name: pageSize
+          in: query
+          description: Количество записей на странице.
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 20
+        - name: specialty
+          in: query
+          description: Фильтр по направлению или специальности.
+          required: false
+          schema:
+            type: string
+            maxLength: 100
+      responses:
+        '200':
+          description: Список актуальных стажировок успешно получен.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VacancyListResponse'
+        '400':
+          description: Некорректные параметры запроса.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Отсутствует или недействителен токен доступа.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Внутренняя ошибка интеграционного шлюза.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /applications/submit:
+    post:
+      tags:
+        - Applications
+      summary: Отправить отклик на стажировку
+      description: Создаёт отклик студента на существующую активную вакансию.
+      operationId: submitApplication
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ApplicationSubmitRequest'
+      responses:
+        '201':
+          description: Отклик успешно создан.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApplicationSubmitResponse'
+        '400':
+          description: Ошибка проверки переданных данных.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Отсутствует или недействителен токен доступа.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Вакансия не найдена или уже неактуальна.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          description: Студент уже отправлял отклик на эту вакансию.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Внутренняя ошибка интеграционного шлюза.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+  schemas:
+    Vacancy:
+      type: object
+      description: Информация об одной актуальной стажировке.
+      required:
+        - id
+        - title
+        - company
+        - description
+        - city
+        - workFormat
+        - employmentType
+        - skills
+        - publishedAt
+        - isActive
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: Уникальный идентификатор вакансии.
+        title:
+          type: string
+          maxLength: 150
+          example: Стажёр-разработчик C#
+        company:
+          type: string
+          maxLength: 150
+          example: ООО «ТехноПартнёр»
+        description:
+          type: string
+          example: Участие в разработке внутренних веб-сервисов.
+        city:
+          type: string
+          example: Москва
+        workFormat:
+          type: string
+          enum:
+            - Офис
+            - Удалённо
+            - Гибридный
+        employmentType:
+          type: string
+          enum:
+            - Стажировка
+            - Частичная занятость
+            - Полная занятость
+        skills:
+          type: array
+          items:
+            type: string
+          example:
+            - C#
+            - SQL
+        salaryFrom:
+          type: number
+          format: double
+          nullable: true
+          minimum: 0
+          description: Нижняя граница оплаты, если указана работодателем.
+        publishedAt:
+          type: string
+          format: date-time
+        applicationDeadline:
+          type: string
+          format: date
+          nullable: true
+        isActive:
+          type: boolean
+          example: true
+    VacancyListResponse:
+      type: object
+      required:
+        - items
+        - total
+        - page
+        - pageSize
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/Vacancy'
+        total:
+          type: integer
+          minimum: 0
+          description: Общее количество найденных вакансий.
+        page:
+          type: integer
+          minimum: 1
+        pageSize:
+          type: integer
+          minimum: 1
+    StudentResume:
+      type: object
+      description: Основные сведения из резюме студента.
+      required:
+        - fullName
+        - email
+        - skills
+      properties:
+        fullName:
+          type: string
+          maxLength: 200
+          example: Иванов Иван Иванович
+        email:
+          type: string
+          format: email
+          maxLength: 256
+          example: student@gmail.com
+        phone:
+          type: string
+          nullable: true
+          pattern: '^\+?[0-9() -]{7,20}$'
+          example: +79991234567
+        skills:
+          type: array
+          minItems: 1
+          items:
+            type: string
+        experience:
+          type: string
+          nullable: true
+          maxLength: 3000
+        portfolioUrl:
+          type: string
+          format: uri
+          nullable: true
+    ApplicationSubmitRequest:
+      type: object
+      required:
+        - vacancyId
+        - studentId
+        - resume
+      properties:
+        vacancyId:
+          type: string
+          format: uuid
+          description: Идентификатор вакансии, полученный через GET /vacancies.
+        studentId:
+          type: string
+          format: uuid
+          description: Идентификатор студента в АИС.
+        resume:
+          $ref: '#/components/schemas/StudentResume'
+        coverLetter:
+          type: string
+          nullable: true
+          maxLength: 2000
+          description: Сопроводительное письмо студента.
+    ApplicationSubmitResponse:
+      type: object
+      required:
+        - applicationId
+        - status
+        - submittedAt
+        - message
+      properties:
+        applicationId:
+          type: string
+          format: uuid
+        status:
+          type: string
+          enum:
+            - Submitted
+            - UnderReview
+        submittedAt:
+          type: string
+          format: date-time
+        message:
+          type: string
+          example: Отклик успешно отправлен работодателю.
+    ErrorResponse:
+      type: object
+      required:
+        - code
+        - message
+      properties:
+        code:
+          type: string
+          example: VALIDATION_ERROR
+        message:
+          type: string
+          example: Поле email заполнено некорректно.
+        details:
+          type: array
+          nullable: true
+          items:
+            type: string
